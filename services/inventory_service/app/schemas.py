@@ -91,3 +91,17 @@ class ReservationOut(BaseModel):
     expires_at: datetime
     created_at: datetime
     items: List[ReservationItemOut]
+
+
+class InventoryPage(BaseModel):
+    items: List[InventoryOut]
+    total: int
+    page: int
+    page_size: int
+
+
+class TransactionPage(BaseModel):
+    items: List[TransactionOut]
+    total: int
+    page: int
+    page_size: int
