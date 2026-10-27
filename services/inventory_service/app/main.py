@@ -495,3 +495,47 @@ def product_transactions(
         .all()
     )
     return schemas.TransactionPage(items=rows, total=total, page=page, page_size=page_size)
+
+
+@app.post("/inventory/restock")
+def restock(
+    data: schemas.RestockRequest,
+    db: Session = Depends(get_db),
+    actor: Actor = Depends(require_staff_or_internal),
+):
+    """Put sold stock back (for example when a paid order is cancelled)."""
+    already = (
+        db.query(InventoryTransaction.id)
+        .filter(
+            InventoryTransaction.change_type == "restock",
+            InventoryTransaction.reference == data.reference,
+        )
+        .first()
+    )
+    if already:
+        return {"restocked": False, "message": "Stock was already restored for this reference"}
+
+    for line in sorted(data.items, key=lambda i: i.product_id):
+        if not apply_change(db, line.product_id, line.quantity, 0):
+            exists = db.query(InventoryItem.id).filter(
+                InventoryItem.product_id == line.product_id
+            ).first()
+            db.rollback()
+            if not exists:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No inventory record for product {line.product_id}",
+                )
+            raise HTTPException(status_code=409, detail="Could not restore stock")
+        log_tx(
+            db,
+            line.product_id,
+            "restock",
+            line.quantity,
+            0,
+            data.reason,
+            data.reference,
+            actor.user_id,
+        )
+    db.commit()
+    return {"restocked": True, "message": "Stock restored"}

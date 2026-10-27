@@ -105,3 +105,9 @@ class TransactionPage(BaseModel):
     total: int
     page: int
     page_size: int
+    
+
+class RestockRequest(BaseModel):
+    reference: str = Field(min_length=3, max_length=100)
+    reason: str = Field(min_length=3, max_length=255)
+    items: List[ReservationItemIn] = Field(min_length=1, max_length=50)
