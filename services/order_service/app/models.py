@@ -116,3 +116,25 @@ class AuditLog(Base):
     action = Column(String(100), nullable=False)
     detail = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
+    
+
+class OrderItemCancellation(Base):
+    __tablename__ = "order_item_cancellations"
+    __table_args__ = (
+        UniqueConstraint(
+            "order_id", "order_item_id", "batch_number", name="uq_cancellation_batch_item"
+        ),
+        CheckConstraint("quantity > 0", name="ck_cancel_qty_positive"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
+    order_item_id = Column(Integer, ForeignKey("order_items.id"), nullable=False, index=True)
+    batch_number = Column(Integer, nullable=False)
+    quantity = Column(Integer, nullable=False)
+    refund_amount = Column(Float, nullable=False)
+    reason = Column(String(255), nullable=False)
+    cancelled_by = Column(Integer, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+    order = relationship("Order", backref="cancellations")

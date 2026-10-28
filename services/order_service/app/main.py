@@ -26,6 +26,7 @@ from .models import (
     IdempotencyKey,
     Order,
     OrderItem,
+    OrderItemCancellation,
     OrderStatusHistory,
     utcnow,
 )
@@ -34,6 +35,7 @@ Base.metadata.create_all(bind=engine)
 logger = logging.getLogger("orders")
 
 CANCELLABLE = ("pending", "confirmed", "processing")
+ITEM_CANCELLABLE = ("confirmed", "processing")
 # the only allowed forward moves for staff: current status -> next status
 NEXT_STATUS = {"confirmed": "processing", "processing": "shipped", "shipped": "delivered"}
 
@@ -54,6 +56,14 @@ def new_order_number() -> str:
     return f"ORD-{utcnow():%Y%m%d}-{secrets.token_hex(3).upper()}"
 
 
+def cancelled_map(o: Order) -> dict:
+    """How many of each item were already cancelled: {item_id: quantity}."""
+    done = {}
+    for c in o.cancellations:
+        done[c.order_item_id] = done.get(c.order_item_id, 0) + c.quantity
+    return done
+
+
 def to_summary(o: Order) -> schemas.OrderSummary:
     return schemas.OrderSummary(
         id=o.id,
@@ -67,6 +77,7 @@ def to_summary(o: Order) -> schemas.OrderSummary:
 
 
 def to_detail(o: Order) -> schemas.OrderDetail:
+    done = cancelled_map(o)
     return schemas.OrderDetail(
         id=o.id,
         order_number=o.order_number,
@@ -81,6 +92,7 @@ def to_detail(o: Order) -> schemas.OrderDetail:
                 unit_price=i.unit_price,
                 quantity=i.quantity,
                 line_total=i.line_total,
+                cancelled_quantity=done.get(i.id, 0),
             )
             for i in o.items
         ],
@@ -90,6 +102,7 @@ def to_detail(o: Order) -> schemas.OrderDetail:
         tax_amount=o.tax_amount,
         shipping_amount=o.shipping_amount,
         total_amount=o.total_amount,
+        refund_due=round(sum(c.refund_amount for c in o.cancellations), 2),
         shipping=schemas.ShippingOut(
             full_name=o.shipping_name,
             phone=o.shipping_phone,
@@ -159,8 +172,15 @@ def do_cancel(db: Session, order: Order, reason: str, user_id: Optional[int]) ->
             if order.reservation_id:
                 clients.release_reservation(order.reservation_id, "Order cancelled")
         else:
-            items = [{"product_id": i.product_id, "quantity": i.quantity} for i in order.items]
-            clients.restock(f"{order.order_number}-cancel", items, "Order cancelled")
+            # only the items that were not already cancelled one by one
+            done = cancelled_map(order)
+            items = [
+                {"product_id": i.product_id, "quantity": i.quantity - done.get(i.id, 0)}
+                for i in order.items
+                if i.quantity - done.get(i.id, 0) > 0
+            ]
+            if items:
+                clients.restock(f"{order.order_number}-cancel", items, "Order cancelled")
         if order.coupon_code:
             clients.release_coupon(order.order_number)
     except Exception:
@@ -440,6 +460,95 @@ def cancel_order(
         raise HTTPException(status_code=403, detail="You do not have permission to do this")
     reason = data.reason if data else "Cancelled by customer"
     order = do_cancel(db, order, reason, actor.user_id)
+    return to_detail(order)
+
+
+@app.post("/orders/{order_id}/cancel-items", response_model=schemas.OrderDetail)
+def cancel_items(
+    order_id: int,
+    data: schemas.CancelItemsRequest,
+    db: Session = Depends(get_db),
+    actor: Actor = Depends(require_user),
+):
+    order = load_order(db, order_id, actor)
+    if actor.role == "inventory_manager":
+        raise HTTPException(status_code=403, detail="You do not have permission to do this")
+    if order.status not in ITEM_CANCELLABLE:
+        raise HTTPException(
+            status_code=409,
+            detail="Items can only be cancelled while the order is confirmed or processing. "
+            "To stop a pending order, cancel the whole order.",
+        )
+
+    by_id = {i.id: i for i in order.items}
+    done = cancelled_map(order)
+    requested = {}
+    for line in data.items:
+        item = by_id.get(line.item_id)
+        if item is None:
+            raise HTTPException(
+                status_code=400, detail=f"Item {line.item_id} is not part of this order"
+            )
+        remaining = item.quantity - done.get(item.id, 0)
+        if line.quantity > remaining:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Only {remaining} of '{item.product_name}' can still be cancelled",
+            )
+        requested[item.id] = line.quantity
+
+    # If nothing would be left, this is really a full cancellation
+    left = sum(i.quantity - done.get(i.id, 0) - requested.get(i.id, 0) for i in order.items)
+    if left == 0:
+        return to_detail(do_cancel(db, order, data.reason, actor.user_id))
+
+    # Refund = item price, minus its share of the coupon discount, plus tax
+    discount_ratio = order.discount_amount / order.subtotal if order.subtotal > 0 else 0
+    taxable = order.subtotal - order.discount_amount
+    tax_rate = order.tax_amount / taxable if taxable > 0 else 0
+    batch = max((c.batch_number for c in order.cancellations), default=0) + 1
+
+    restock_items = []
+    total_refund = 0.0
+    for line in data.items:
+        item = by_id[line.item_id]
+        net = round(item.unit_price * line.quantity * (1 - discount_ratio), 2)
+        refund = round(net + net * tax_rate, 2)
+        total_refund += refund
+        db.add(
+            OrderItemCancellation(
+                order_id=order.id,
+                order_item_id=item.id,
+                batch_number=batch,
+                quantity=line.quantity,
+                refund_amount=refund,
+                reason=data.reason,
+                cancelled_by=actor.user_id,
+            )
+        )
+        restock_items.append({"product_id": item.product_id, "quantity": line.quantity})
+
+    count = sum(requested.values())
+    add_history(
+        db,
+        order.id,
+        order.status,
+        f"{count} item(s) cancelled. Refund due: {total_refund:.2f}",
+        actor.user_id,
+    )
+    add_audit(db, actor.user_id, "order_items_cancelled", f"{order.order_number}: {count} item(s)")
+
+    try:
+        db.flush()  # a duplicate request at the same moment fails here
+        clients.restock(f"{order.order_number}-partial-{batch}", restock_items, "Items cancelled")
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Please try again")
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(order)
     return to_detail(order)
 
 
