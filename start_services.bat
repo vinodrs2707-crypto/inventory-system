@@ -6,3 +6,4 @@ start "Coupon 8004" cmd /k "venv\Scripts\activate && uvicorn services.coupon_ser
 start "Cart 8005" cmd /k "venv\Scripts\activate && uvicorn services.cart_service.app.main:app --reload --port 8005"
 start "Order 8006" cmd /k "venv\Scripts\activate && uvicorn services.order_service.app.main:app --reload --port 8006"
 start "Payment 8007" cmd /k "venv\Scripts\activate && uvicorn services.payment_service.app.main:app --reload --port 8007"
+start "Gateway 8000" cmd /k "venv\Scripts\activate && uvicorn services.gateway.app.main:app --reload --port 8000"
