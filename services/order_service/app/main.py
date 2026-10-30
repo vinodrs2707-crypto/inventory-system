@@ -601,3 +601,24 @@ def payment_result(
 
     db.refresh(order)
     return to_detail(order)
+
+
+@app.get("/orders/eligibility/review")
+def review_eligibility(
+    user_id: int = Query(..., ge=1),
+    product_id: int = Query(..., ge=1),
+    db: Session = Depends(get_db),
+    actor: Actor = Depends(require_internal),
+):
+    """Used by the Review service: did this customer receive this product?"""
+    orders = (
+        db.query(Order)
+        .filter(Order.user_id == user_id, Order.status == "delivered")
+        .all()
+    )
+    for order in orders:
+        done = cancelled_map(order)
+        for item in order.items:
+            if item.product_id == product_id and item.quantity - done.get(item.id, 0) > 0:
+                return {"eligible": True, "order_id": order.id}
+    return {"eligible": False, "order_id": None}

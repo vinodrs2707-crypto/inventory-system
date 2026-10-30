@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     CART_SERVICE_URL: str = "http://127.0.0.1:8005"
     ORDER_SERVICE_URL: str = "http://127.0.0.1:8006"
     PAYMENT_SERVICE_URL: str = "http://127.0.0.1:8007"
-
+    REVIEW_SERVICE_URL: str = "http://127.0.0.1:8008"
     # websites that may call the gateway from a browser (comma separated)
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
 

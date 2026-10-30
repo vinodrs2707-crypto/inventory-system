@@ -29,9 +29,12 @@ SERVICES = {
     "cart": settings.CART_SERVICE_URL,
     "order": settings.ORDER_SERVICE_URL,
     "payment": settings.PAYMENT_SERVICE_URL,
+    "review": settings.REVIEW_SERVICE_URL,
 }
 
 ROUTES = [
+    (re.compile(r"^products/\d+/reviews$"), "review"),
+    (re.compile(r"^reviews(/|$)"), "review"),
     (re.compile(r"^auth(/|$)"), "auth"),
     (re.compile(r"^(products|categories)(/|$)"), "product"),
     (re.compile(r"^inventory(/|$)"), "inventory"),
@@ -46,6 +49,8 @@ BLOCKED = [
     ("POST", re.compile(r"^coupons/redeem$")),
     ("POST", re.compile(r"^coupons/redemptions/[^/]+/release$")),
     ("POST", re.compile(r"^orders/\d+/payment-result$")),
+    ("GET", re.compile(r"^orders/eligibility/review$")),
+    ("PUT", re.compile(r"^products/\d+/rating$")),
 ]
 
 PUBLIC_POSTS = {"auth/register", "auth/login", "auth/refresh"}

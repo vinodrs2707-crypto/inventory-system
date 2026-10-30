@@ -387,3 +387,38 @@ async def bulk_import(
 
     db.commit()
     return schemas.BulkImportResult(created=created, skipped=skipped, errors=errors)
+
+
+# ----- internal API: the Review service reports ratings here -----
+import hmac
+
+from fastapi import Header
+from pydantic import BaseModel, Field
+
+from .config import settings
+
+
+class RatingUpdate(BaseModel):
+    rating_average: float = Field(ge=0, le=5)
+    rating_count: int = Field(ge=0)
+
+
+@app.put("/products/{product_id}/rating", status_code=204)
+def update_rating(
+    product_id: int,
+    data: RatingUpdate,
+    x_internal_key: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    expected = settings.INTERNAL_API_KEY
+    if (
+        not expected
+        or x_internal_key is None
+        or not hmac.compare_digest(x_internal_key.encode("utf-8"), expected.encode("utf-8"))
+    ):
+        raise HTTPException(status_code=403, detail="You do not have permission to do this")
+    product = get_active_product(db, product_id)
+    product.rating_average = round(data.rating_average, 2)
+    product.rating_count = data.rating_count
+    db.commit()
+    return Response(status_code=204)
