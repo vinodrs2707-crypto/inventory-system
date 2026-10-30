@@ -237,3 +237,77 @@ def cancel_payment(
     db.commit()
     db.refresh(payment)
     return to_out(payment)
+
+
+# ----- refunds (called by the Return service) -----
+from pydantic import BaseModel, Field
+from sqlalchemy import func
+
+from .dependencies import get_actor
+from .models import Refund
+
+
+class RefundRequest(BaseModel):
+    order_id: int = Field(ge=1)
+    amount: float = Field(gt=0, le=100_000_000)
+    reference: str = Field(min_length=3, max_length=100)
+    reason: str = Field(min_length=3, max_length=255)
+
+
+def refund_out(refund: Refund) -> dict:
+    return {
+        "refund_id": refund.id,
+        "reference": refund.reference,
+        "status": refund.status,
+        "amount": refund.amount,
+    }
+
+
+@app.post("/payments/refunds")
+def create_refund(
+    data: RefundRequest,
+    db: Session = Depends(get_db),
+    actor: Actor = Depends(get_actor),
+):
+    if actor.role != "internal":
+        raise HTTPException(status_code=403, detail="You do not have permission to do this")
+
+    # Same reference sent twice = same refund (no double refund)
+    existing = db.query(Refund).filter(Refund.reference == data.reference).first()
+    if existing:
+        return refund_out(existing)
+
+    payment = (
+        db.query(Payment)
+        .filter(Payment.order_id == data.order_id, Payment.status == "succeeded")
+        .first()
+    )
+    if payment is None:
+        raise HTTPException(status_code=409, detail="There is no completed payment for this order")
+    refunded = (
+        db.query(func.coalesce(func.sum(Refund.amount), 0.0))
+        .filter(Refund.payment_id == payment.id)
+        .scalar()
+    )
+    if refunded + data.amount > payment.amount + 0.005:
+        raise HTTPException(status_code=409, detail="The refund is more than the amount paid")
+
+    refund = Refund(
+        reference=data.reference,
+        payment_id=payment.id,
+        order_id=data.order_id,
+        amount=data.amount,
+        reason=data.reason,
+    )
+    db.add(refund)
+    add_audit(db, None, "refund_processed", f"{data.reference} {data.amount:.2f}")
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = db.query(Refund).filter(Refund.reference == data.reference).first()
+        if existing:
+            return refund_out(existing)
+        raise HTTPException(status_code=409, detail="Duplicate refund reference")
+    db.refresh(refund)
+    return refund_out(refund)

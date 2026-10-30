@@ -63,3 +63,18 @@ class AuditLog(Base):
     action = Column(String(100), nullable=False)
     detail = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
+
+    
+class Refund(Base):
+    __tablename__ = "refunds"
+    __table_args__ = (CheckConstraint("amount > 0", name="ck_refund_amount_positive"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    # one refund per reference: this is what stops a double refund
+    reference = Column(String(100), unique=True, index=True, nullable=False)
+    payment_id = Column(Integer, index=True, nullable=False)
+    order_id = Column(Integer, index=True, nullable=False)
+    amount = Column(Float, nullable=False)
+    reason = Column(String(255), nullable=False)
+    status = Column(String(20), nullable=False, default="processed")
+    created_at = Column(DateTime, nullable=False, default=utcnow)

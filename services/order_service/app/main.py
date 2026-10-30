@@ -622,3 +622,53 @@ def review_eligibility(
             if item.product_id == product_id and item.quantity - done.get(item.id, 0) > 0:
                 return {"eligible": True, "order_id": order.id}
     return {"eligible": False, "order_id": None}
+
+
+@app.get("/orders/{order_id}/returnable")
+def returnable_items(
+    order_id: int,
+    user_id: int = Query(..., ge=1),
+    db: Session = Depends(get_db),
+    actor: Actor = Depends(require_internal),
+):
+    """Used by the Return service: what can this customer send back?"""
+    empty = {"eligible": False, "delivered_at": None, "items": []}
+    order = db.get(Order, order_id)
+    if order is None or order.user_id != user_id:
+        return {**empty, "reason": "Order not found"}
+    if order.status != "delivered":
+        return {
+            **empty,
+            "reason": f"Only delivered orders can be returned (this order is {order.status})",
+        }
+
+    delivered_at = next(
+        (h.created_at for h in reversed(order.history) if h.status == "delivered"),
+        order.updated_at,
+    )
+    done = cancelled_map(order)
+    discount_ratio = order.discount_amount / order.subtotal if order.subtotal > 0 else 0
+    taxable = order.subtotal - order.discount_amount
+    tax_rate = order.tax_amount / taxable if taxable > 0 else 0
+
+    items = []
+    for item in order.items:
+        remaining = item.quantity - done.get(item.id, 0)
+        if remaining <= 0:
+            continue
+        net = item.unit_price * (1 - discount_ratio)
+        items.append(
+            {
+                "item_id": item.id,
+                "product_id": item.product_id,
+                "product_name": item.product_name,
+                "unit_refund": round(net * (1 + tax_rate), 2),
+                "max_quantity": remaining,
+            }
+        )
+    return {
+        "eligible": True,
+        "reason": None,
+        "delivered_at": delivered_at.isoformat(),
+        "items": items,
+    }
