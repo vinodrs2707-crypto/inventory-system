@@ -672,3 +672,51 @@ def returnable_items(
         "delivered_at": delivered_at.isoformat(),
         "items": items,
     }
+@app.get("/orders/reports/export")
+def export_orders_for_reports(
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(200, ge=1, le=500),
+    db: Session = Depends(get_db),
+    actor: Actor = Depends(require_staff),
+):
+    """Used by the Analytics service: orders (with items) created in a date range."""
+    if date_from > date_to:
+        raise HTTPException(status_code=400, detail="date_from cannot be after date_to")
+    query = db.query(Order).filter(
+        Order.created_at >= datetime.combine(date_from, time.min),
+        Order.created_at <= datetime.combine(date_to, time.max),
+    )
+    total = query.count()
+    rows = query.order_by(Order.id).offset((page - 1) * page_size).limit(page_size).all()
+
+    orders = []
+    for o in rows:
+        done = cancelled_map(o)
+        orders.append(
+            {
+                "id": o.id,
+                "order_number": o.order_number,
+                "status": o.status,
+                "payment_status": o.payment_status,
+                "created_at": o.created_at.isoformat(),
+                "subtotal": o.subtotal,
+                "discount_amount": o.discount_amount,
+                "tax_amount": o.tax_amount,
+                "shipping_amount": o.shipping_amount,
+                "total_amount": o.total_amount,
+                "refund_due": round(sum(c.refund_amount for c in o.cancellations), 2),
+                "items": [
+                    {
+                        "product_id": i.product_id,
+                        "product_name": i.product_name,
+                        "quantity": i.quantity,
+                        "cancelled_quantity": done.get(i.id, 0),
+                        "line_total": i.line_total,
+                    }
+                    for i in o.items
+                ],
+            }
+        )
+    return {"total": total, "page": page, "page_size": page_size, "orders": orders}

@@ -31,12 +31,14 @@ SERVICES = {
     "payment": settings.PAYMENT_SERVICE_URL,
     "review": settings.REVIEW_SERVICE_URL,
     "return": settings.RETURN_SERVICE_URL,
+    "analytics": settings.ANALYTICS_SERVICE_URL,
 }
 
 ROUTES = [
     (re.compile(r"^products/\d+/reviews$"), "review"),
     (re.compile(r"^reviews(/|$)"), "review"),
     (re.compile(r"^returns(/|$)"), "return"),
+    (re.compile(r"^analytics(/|$)"), "analytics"),
     (re.compile(r"^auth(/|$)"), "auth"),
     (re.compile(r"^(products|categories)(/|$)"), "product"),
     (re.compile(r"^inventory(/|$)"), "inventory"),

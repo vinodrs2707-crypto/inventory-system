@@ -9,3 +9,4 @@ start "Payment 8007" cmd /k "venv\Scripts\activate && uvicorn services.payment_s
 start "Gateway 8000" cmd /k "venv\Scripts\activate && uvicorn services.gateway.app.main:app --reload --port 8000"
 start "Review 8008" cmd /k "venv\Scripts\activate && uvicorn services.review_service.app.main:app --reload --port 8008"
 start "Return 8009" cmd /k "venv\Scripts\activate && uvicorn services.return_service.app.main:app --reload --port 8009"
+start "Analytics 8010" cmd /k "venv\Scripts\activate && uvicorn services.analytics_service.app.main:app --reload --port 8010"
