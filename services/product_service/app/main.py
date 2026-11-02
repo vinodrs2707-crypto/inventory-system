@@ -422,3 +422,40 @@ def update_rating(
     product.rating_count = data.rating_count
     db.commit()
     return Response(status_code=204)
+
+# ----- Redis cache for the public catalog, cleared whenever products change -----
+import asyncio
+import hashlib
+
+from services.common.redis_support import cache_bump, cache_lookup, cache_store
+
+CACHEABLE_PATHS = ("/products", "/categories")
+CACHE_SECONDS = 60
+
+
+@app.middleware("http")
+async def product_cache(request, call_next):
+    if request.method == "GET" and request.url.path in CACHEABLE_PATHS:
+        raw_key = f"{request.url.path}?{request.url.query}"
+        key = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+        cached, version = await asyncio.to_thread(cache_lookup, "product", key)
+        if cached is not None:
+            return Response(
+                content=cached, media_type="application/json", headers={"X-Cache": "HIT"}
+            )
+        response = await call_next(request)
+        if response.status_code != 200:
+            return response
+        body = b"".join([chunk async for chunk in response.body_iterator])
+        await asyncio.to_thread(cache_store, "product", key, body, CACHE_SECONDS, version)
+        return Response(
+            content=body,
+            status_code=200,
+            media_type="application/json",
+            headers={"X-Cache": "MISS" if version is not None else "BYPASS"},
+        )
+
+    response = await call_next(request)
+    if request.method != "GET" and response.status_code < 400:
+        await asyncio.to_thread(cache_bump, "product")  # something changed: clear the cache
+    return response

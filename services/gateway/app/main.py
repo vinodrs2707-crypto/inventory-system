@@ -14,6 +14,8 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from services.common.redis_support import HybridRateLimiter
+
 from .config import settings
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -159,11 +161,11 @@ class RateLimiter:
         return 0
 
 
-limiter = RateLimiter()
+limiter = HybridRateLimiter(RateLimiter())  # Redis first, in-memory if Redis is down
 
 
-def enforce_limit(key: str, limit: int):
-    wait = limiter.check(key, limit)
+async def enforce_limit(key: str, limit: int):
+    wait = await asyncio.to_thread(limiter.check, key, limit)
     if wait:
         raise GatewayError(
             429,
@@ -309,10 +311,10 @@ async def proxy(path: str, request: Request):
     # 3. rate limits
     who = f"user:{user_id}" if user_id else f"ip:{ip}"
     if method == "POST" and path in PUBLIC_POSTS:
-        enforce_limit(f"auth:{ip}", settings.AUTH_RATE_LIMIT_PER_MINUTE)
+        await enforce_limit(f"auth:{ip}", settings.AUTH_RATE_LIMIT_PER_MINUTE)
     if (method, path) in SENSITIVE:
-        enforce_limit(f"sensitive:{who}", settings.SENSITIVE_RATE_LIMIT_PER_MINUTE)
-    enforce_limit(f"general:{who}", settings.GENERAL_RATE_LIMIT_PER_MINUTE)
+        await enforce_limit(f"sensitive:{who}", settings.SENSITIVE_RATE_LIMIT_PER_MINUTE)
+    await enforce_limit(f"general:{who}", settings.GENERAL_RATE_LIMIT_PER_MINUTE)
 
     # 4. body size
     declared = request.headers.get("content-length", "")
