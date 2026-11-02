@@ -138,3 +138,9 @@ class OrderItemCancellation(Base):
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
     order = relationship("Order", backref="cancellations")
+    
+
+# Events waiting to be sent to RabbitMQ (the "outbox")
+from services.common.events import create_outbox_model  # noqa: E402
+
+OutboxEvent = create_outbox_model(Base)

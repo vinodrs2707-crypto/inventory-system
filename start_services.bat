@@ -10,3 +10,4 @@ start "Gateway 8000" cmd /k "venv\Scripts\activate && uvicorn services.gateway.a
 start "Review 8008" cmd /k "venv\Scripts\activate && uvicorn services.review_service.app.main:app --reload --port 8008"
 start "Return 8009" cmd /k "venv\Scripts\activate && uvicorn services.return_service.app.main:app --reload --port 8009"
 start "Analytics 8010" cmd /k "venv\Scripts\activate && uvicorn services.analytics_service.app.main:app --reload --port 8010"
+start "Notification 8011" cmd /k "venv\Scripts\activate && uvicorn services.notification_service.app.main:app --reload --port 8011"

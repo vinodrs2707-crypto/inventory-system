@@ -17,6 +17,7 @@ idna==3.20
 iniconfig==2.3.1
 opentelemetry-api==1.45.1
 packaging==26.3
+pika==1.4.4
 pillow==13.0.0
 pluggy==1.7.0
 pydantic==2.14.1
@@ -28,6 +29,7 @@ pytest==9.1.1
 python-dotenv==1.2.4
 python-multipart==0.0.32
 PyYAML==6.0.3
+redis==8.1.0
 reportlab==5.1.0
 SQLAlchemy==2.1.6
 starlette==1.10.0

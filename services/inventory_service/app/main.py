@@ -9,6 +9,8 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from services.common.events import emit, start_outbox_publisher
+
 from . import schemas
 from .database import Base, SessionLocal, engine, get_db
 from .dependencies import Actor, get_actor, require_staff, require_staff_or_internal
@@ -16,6 +18,7 @@ from .models import (
     InventoryItem,
     InventoryTransaction,
     Reservation,
+    OutboxEvent,
     ReservationItem,
     utcnow,
 )
@@ -106,7 +109,20 @@ def log_tx(
             user_id=user_id,
         )
     )
-
+    # Low-stock alert: only when the available stock drops down to the alert level
+    available_after = item.quantity_on_hand - item.quantity_reserved
+    available_before = available_after - (on_hand_change - reserved_change)
+    if available_before > item.low_stock_threshold >= available_after:
+        emit(
+            db,
+            OutboxEvent,
+            "inventory.low_stock",
+            {
+                "product_id": product_id,
+                "quantity_available": available_after,
+                "low_stock_threshold": item.low_stock_threshold,
+            },
+        )
 
 def finish_reservation(
     db: Session,
@@ -199,9 +215,11 @@ async def expiry_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    publisher = start_outbox_publisher(SessionLocal, OutboxEvent, "inventory")
     task = asyncio.create_task(expiry_loop())
     yield
     task.cancel()
+    publisher.stop()
 
 
 app = FastAPI(title="Inventory Service", lifespan=lifespan)

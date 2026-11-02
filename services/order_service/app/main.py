@@ -10,6 +10,8 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from services.common.events import emit, start_outbox_publisher
+
 from . import clients, schemas
 from .config import settings
 from .database import Base, SessionLocal, engine, get_db
@@ -28,6 +30,7 @@ from .models import (
     OrderItem,
     OrderItemCancellation,
     OrderStatusHistory,
+    OutboxEvent,
     utcnow,
 )
 
@@ -164,6 +167,17 @@ def do_cancel(db: Session, order: Order, reason: str, user_id: Optional[int]) ->
         )
     add_history(db, order.id, "cancelled", reason, user_id)
     add_audit(db, user_id, "order_cancelled", f"{order.order_number}: {reason}")
+    emit(
+        db,
+        OutboxEvent,
+        "order.cancelled",
+        {
+            "order_id": order.id,
+            "order_number": order.order_number,
+            "user_id": order.user_id,
+            "reason": reason,
+        },
+    )
 
     # Give back stock and coupon BEFORE saving. If one of these fails,
     # nothing is saved and the cancel can safely be tried again.
@@ -226,9 +240,11 @@ async def expiry_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    publisher = start_outbox_publisher(SessionLocal, OutboxEvent, "order")
     task = asyncio.create_task(expiry_loop())
     yield
     task.cancel()
+    publisher.stop()
 
 
 app = FastAPI(title="Order Management Service", lifespan=lifespan)
@@ -333,6 +349,18 @@ def create_order(
         db.flush()
         add_history(db, order.id, "pending", "Order placed. Waiting for payment.", user.user_id)
         add_audit(db, user.user_id, "order_created", order_number)
+        emit(
+            db,
+            OutboxEvent,
+            "order.created",
+            {
+                "order_id": order.id,
+                "order_number": order_number,
+                "user_id": user.user_id,
+                "total_amount": total,
+                "item_count": sum(i["quantity"] for i in cart["items"]),
+            },
+        )
         db.get(IdempotencyKey, key_id).order_id = order.id
         db.commit()
     except Exception:
@@ -443,6 +471,13 @@ def update_status(
         )
     add_history(db, order.id, data.status, data.note or f"Order {data.status}", actor.user_id)
     add_audit(db, actor.user_id, "order_status_changed", f"{order.order_number} -> {data.status}")
+    if data.status in ("shipped", "delivered"):
+        emit(
+            db,
+            OutboxEvent,
+            f"order.{data.status}",
+            {"order_id": order.id, "order_number": order.order_number, "user_id": order.user_id},
+        )
     db.commit()
     db.refresh(order)
     return to_detail(order)
@@ -589,6 +624,17 @@ def payment_result(
             raise HTTPException(status_code=409, detail="The order was changed. Please retry.")
         add_history(db, order.id, "confirmed", "Payment received. Order confirmed.", None)
         add_audit(db, None, "payment_succeeded", f"{order.order_number} / {data.payment_id}")
+        emit(
+            db,
+            OutboxEvent,
+            "order.confirmed",
+            {
+                "order_id": order.id,
+                "order_number": order.order_number,
+                "user_id": order.user_id,
+                "total_amount": order.total_amount,
+            },
+        )
         db.commit()
     else:
         if order.status != "pending":
@@ -597,6 +643,12 @@ def payment_result(
         order.payment_id = data.payment_id
         add_history(db, order.id, "pending", "Payment failed. You can try again.", None)
         add_audit(db, None, "payment_failed", f"{order.order_number} / {data.payment_id}")
+        emit(
+            db,
+            OutboxEvent,
+            "order.payment_failed",
+            {"order_id": order.id, "order_number": order.order_number, "user_id": order.user_id},
+        )
         db.commit()
 
     db.refresh(order)

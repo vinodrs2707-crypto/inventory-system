@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     REVIEW_SERVICE_URL: str = "http://127.0.0.1:8008"
     RETURN_SERVICE_URL: str = "http://127.0.0.1:8009"
     ANALYTICS_SERVICE_URL: str = "http://127.0.0.1:8010"
+    NOTIFICATION_SERVICE_URL: str = "http://127.0.0.1:8011"
     # websites that may call the gateway from a browser (comma separated)
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
 

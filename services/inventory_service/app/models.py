@@ -76,3 +76,9 @@ class ReservationItem(Base):
     quantity = Column(Integer, nullable=False)
 
     reservation = relationship("Reservation", back_populates="items")
+    
+
+# Events waiting to be sent to RabbitMQ (the "outbox")
+from services.common.events import create_outbox_model  # noqa: E402
+
+OutboxEvent = create_outbox_model(Base)

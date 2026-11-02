@@ -32,6 +32,7 @@ SERVICES = {
     "review": settings.REVIEW_SERVICE_URL,
     "return": settings.RETURN_SERVICE_URL,
     "analytics": settings.ANALYTICS_SERVICE_URL,
+    "notification": settings.NOTIFICATION_SERVICE_URL,
 }
 
 ROUTES = [
@@ -39,6 +40,7 @@ ROUTES = [
     (re.compile(r"^reviews(/|$)"), "review"),
     (re.compile(r"^returns(/|$)"), "return"),
     (re.compile(r"^analytics(/|$)"), "analytics"),
+    (re.compile(r"^notifications(/|$)"), "notification"),
     (re.compile(r"^auth(/|$)"), "auth"),
     (re.compile(r"^(products|categories)(/|$)"), "product"),
     (re.compile(r"^inventory(/|$)"), "inventory"),
