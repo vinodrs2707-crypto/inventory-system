@@ -29,7 +29,22 @@ from .models import Category, Product, RecentlyViewed, utcnow
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Product Catalog Service")
+from contextlib import asynccontextmanager
+
+from services.common.events import rabbitmq_url
+
+from .consumer import start_stock_consumer
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    consumer = start_stock_consumer() if rabbitmq_url() else None
+    yield
+    if consumer:
+        consumer.stop()
+
+
+app = FastAPI(title="Product Catalog Service", lifespan=lifespan)
 
 ADMIN = "administrator"
 MAX_IMPORT_BYTES = 1_000_000
@@ -422,7 +437,7 @@ def update_rating(
     product.rating_count = data.rating_count
     db.commit()
     return Response(status_code=204)
-
+    
 # ----- Redis cache for the public catalog, cleared whenever products change -----
 import asyncio
 import hashlib

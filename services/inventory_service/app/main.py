@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time as time_module
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta
 from typing import Optional
@@ -112,6 +113,16 @@ def log_tx(
     # Low-stock alert: only when the available stock drops down to the alert level
     available_after = item.quantity_on_hand - item.quantity_reserved
     available_before = available_after - (on_hand_change - reserved_change)
+    emit(
+        db,
+        OutboxEvent,
+        "inventory.stock_changed",
+        {
+            "product_id": product_id,
+            "quantity_available": available_after,
+            "version": time_module.time_ns() // 1000,
+        },
+    )
     if available_before > item.low_stock_threshold >= available_after:
         emit(
             db,
@@ -557,3 +568,27 @@ def restock(
         )
     db.commit()
     return {"restocked": True, "message": "Stock restored"}
+
+
+@app.post("/inventory/resync-stock-events")
+def resync_stock_events(
+    db: Session = Depends(get_db),
+    actor: Actor = Depends(require_staff),
+):
+    """Send the current stock of every product to the other services."""
+    items = db.query(InventoryItem).all()
+    version = time_module.time_ns() // 1000
+    for item in items:
+        emit(
+            db,
+            OutboxEvent,
+            "inventory.stock_changed",
+            {
+                "product_id": item.product_id,
+                "quantity_available": item.quantity_on_hand - item.quantity_reserved,
+                "version": version,
+            },
+        )
+    db.commit()
+    return {"events_queued": len(items)}
+

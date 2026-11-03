@@ -78,3 +78,12 @@ class Refund(Base):
     reason = Column(String(255), nullable=False)
     status = Column(String(20), nullable=False, default="processed")
     created_at = Column(DateTime, nullable=False, default=utcnow)
+    
+
+class StockVersion(Base):
+    """The newest stock event applied per product, so old events cannot overwrite new ones."""
+
+    __tablename__ = "stock_versions"
+
+    product_id = Column(Integer, primary_key=True)
+    version = Column(Integer, nullable=False)
