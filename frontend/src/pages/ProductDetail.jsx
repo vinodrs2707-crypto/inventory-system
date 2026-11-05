@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { request } from "../api.js";
 import { useAuth } from "../auth.jsx";
 import Reviews from "../components/Reviews.jsx";
+import { useCart } from "../cart.jsx";
 import { useToast } from "../components/toast.jsx";
 import { ErrorBox, Spinner, Stars, formatPrice } from "../components/ui.jsx";
 
@@ -12,6 +13,7 @@ export default function ProductDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
+  const { refresh: refreshCart } = useCart();
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -46,6 +48,7 @@ export default function ProductDetail() {
     try {
       await request("/cart/items", { method: "POST", body: { product_id: product.id, quantity } });
       toast.success(`Added ${quantity} to your cart.`);
+      refreshCart();
     } catch (e) {
       toast.error(e.message);
     } finally {

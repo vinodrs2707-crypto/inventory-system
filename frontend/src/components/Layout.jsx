@@ -1,8 +1,10 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth.jsx";
+import { useCart } from "../cart.jsx";
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const { count } = useCart();
   const navigate = useNavigate();
 
   function signOut() {
@@ -23,6 +25,11 @@ export default function Layout() {
             </NavLink>
             {user ? (
               <>
+                <NavLink to="/wishlist">Wishlist</NavLink>
+                <NavLink to="/cart">
+                  Cart{count > 0 && <span className="count">{count}</span>}
+                </NavLink>
+                <NavLink to="/orders">Orders</NavLink>
                 <span className="muted">Hi, {user.full_name.split(" ")[0]}</span>
                 <button className="btn btn-secondary btn-small" onClick={signOut}>
                   Sign out

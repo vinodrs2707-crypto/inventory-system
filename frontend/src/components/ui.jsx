@@ -99,3 +99,21 @@ export function ConfirmDialog({ open, title, message, confirmLabel = "Confirm", 
     </div>
   );
 }
+
+
+const STATUS_CLASS = {
+  pending: "badge-warn",
+  confirmed: "badge-info",
+  processing: "badge-info",
+  shipped: "badge-info",
+  delivered: "badge-ok",
+  cancelled: "badge-danger",
+  paid: "badge-ok",
+  failed: "badge-danger",
+  refund_pending: "badge-warn",
+  refunded: "badge-ok",
+};
+
+export function StatusBadge({ status }) {
+  return <span className={`badge ${STATUS_CLASS[status] || ""}`}>{String(status).replace("_", " ")}</span>;
+}
