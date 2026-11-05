@@ -143,3 +143,38 @@ def refresh(data: schemas.RefreshRequest, db: Session = Depends(get_db)):
 @app.get("/auth/me", response_model=schemas.UserOut)
 def me(current_user: models.User = Depends(get_current_user)):
     return current_user
+
+
+@app.patch("/auth/me", response_model=schemas.UserOut)
+def update_me(
+    data: schemas.ProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    current_user.full_name = data.full_name.strip()
+    add_audit(db, current_user.id, "profile_updated")
+    db.refresh(current_user)
+    return current_user
+
+
+@app.post("/auth/change-password", response_model=schemas.TokenResponse)
+def change_password(
+    data: schemas.ChangePasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    check_login_rate_limit(request)  # stops someone from guessing the current password
+    if not verify_password(data.current_password, current_user.hashed_password):
+        add_audit(db, current_user.id, "password_change_failed")
+        raise HTTPException(status_code=400, detail="Your current password is incorrect")
+    if data.new_password == data.current_password:
+        raise HTTPException(status_code=400, detail="The new password must be different from the current one")
+    current_user.hashed_password = hash_password(data.new_password)
+    # every other signed-in device is signed out
+    db.query(models.RefreshToken).filter(
+        models.RefreshToken.user_id == current_user.id, models.RefreshToken.revoked == False  # noqa: E712
+    ).update({"revoked": True})
+    db.commit()
+    add_audit(db, current_user.id, "password_changed")
+    return issue_tokens(db, current_user)

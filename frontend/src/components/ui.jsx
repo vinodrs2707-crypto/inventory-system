@@ -112,8 +112,42 @@ const STATUS_CLASS = {
   failed: "badge-danger",
   refund_pending: "badge-warn",
   refunded: "badge-ok",
+  requested: "badge-warn",
+  approved: "badge-info",
+  received: "badge-info",
+  accepted: "badge-ok",
+  rejected: "badge-danger",
+  declined: "badge-danger",
+  processed: "badge-ok",
 };
 
 export function StatusBadge({ status }) {
   return <span className={`badge ${STATUS_CLASS[status] || ""}`}>{String(status).replace("_", " ")}</span>;
+}
+
+
+export function Steps({ steps, history, endings = [] }) {
+  const reached = new Map();
+  history.forEach((h) => {
+    if (!reached.has(h.status)) reached.set(h.status, h.created_at);
+  });
+  const ended = endings.find(([key]) => reached.has(key));
+  return (
+    <div className="steps" aria-label="Progress">
+      {steps.map(([key, label]) => (
+        <div key={key} className={`step ${reached.has(key) ? "done" : ""}`}>
+          <div className="dot">{reached.has(key) ? "✓" : ""}</div>
+          <div>{label}</div>
+          <div className="when">{reached.has(key) ? formatDate(reached.get(key)) : ""}</div>
+        </div>
+      ))}
+      {ended && (
+        <div className="step cancelled">
+          <div className="dot">×</div>
+          <div>{ended[1]}</div>
+          <div className="when">{formatDate(reached.get(ended[0]))}</div>
+        </div>
+      )}
+    </div>
+  );
 }

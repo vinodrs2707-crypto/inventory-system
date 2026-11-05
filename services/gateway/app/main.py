@@ -64,7 +64,12 @@ BLOCKED = [
 ]
 
 PUBLIC_POSTS = {"auth/register", "auth/login", "auth/refresh"}
-SENSITIVE = {("POST", "orders"), ("POST", "payments"), ("POST", "coupons/validate")}
+SENSITIVE = {
+    ("POST", "orders"),
+    ("POST", "payments"),
+    ("POST", "coupons/validate"),
+    ("POST", "auth/change-password"),
+}
 
 # Only these headers are passed on. Everything else (like X-Internal-Key) is dropped.
 FORWARD_REQUEST_HEADERS = (
