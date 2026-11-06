@@ -4,7 +4,7 @@ import { useCart } from "../cart.jsx";
 import { useNotifications } from "../notifications.jsx";
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, isStaff } = useAuth();
   const { count } = useCart();
   const { unread } = useNotifications();
   const navigate = useNavigate();
@@ -36,6 +36,7 @@ export default function Layout() {
                 <NavLink to="/notifications">
                   Notifications{unread > 0 && <span className="count">{unread}</span>}
                 </NavLink>
+                {isStaff && <NavLink to="/admin">Admin</NavLink>}
                 <NavLink to="/account">{user.full_name.split(" ")[0]}</NavLink>
                 <button className="btn btn-secondary btn-small" onClick={signOut}>
                   Sign out

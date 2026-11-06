@@ -1,7 +1,13 @@
 import { Link, Route, Routes } from "react-router-dom";
+import AdminLayout from "./components/AdminLayout.jsx";
 import Layout from "./components/Layout.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import Account from "./pages/Account.jsx";
+import AdminInventory from "./pages/admin/Inventory.jsx";
+import AdminOrders from "./pages/admin/Orders.jsx";
+import AdminOrderView from "./pages/admin/OrderView.jsx";
+import AdminProducts from "./pages/admin/Products.jsx";
+import Dashboard from "./pages/admin/Dashboard.jsx";
 import Cart from "./pages/Cart.jsx";
 import Catalog from "./pages/Catalog.jsx";
 import Checkout from "./pages/Checkout.jsx";
@@ -30,6 +36,14 @@ function Private({ children }) {
   return <ProtectedRoute>{children}</ProtectedRoute>;
 }
 
+function Staff({ children }) {
+  return <ProtectedRoute roles={["administrator", "inventory_manager"]}>{children}</ProtectedRoute>;
+}
+
+function AdminOnly({ children }) {
+  return <ProtectedRoute roles={["administrator"]}>{children}</ProtectedRoute>;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -49,6 +63,15 @@ export default function App() {
         <Route path="/returns/:id" element={<Private><ReturnDetail /></Private>} />
         <Route path="/notifications" element={<Private><Notifications /></Private>} />
         <Route path="/account" element={<Private><Account /></Private>} />
+
+        <Route path="/admin" element={<Staff><AdminLayout /></Staff>}>
+          <Route index element={<Dashboard />} />
+          <Route path="products" element={<AdminOnly><AdminProducts /></AdminOnly>} />
+          <Route path="inventory" element={<AdminInventory />} />
+          <Route path="orders" element={<AdminOrders />} />
+          <Route path="orders/:id" element={<AdminOrderView />} />
+        </Route>
+
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

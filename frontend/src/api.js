@@ -104,9 +104,10 @@ export async function request(path, { method = "GET", body, params, auth = true,
   const send = () => {
     const h = { ...headers };
     const hasBody = body !== undefined;
-    if (hasBody) h["Content-Type"] = "application/json";
+    const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+    if (hasBody && !isForm) h["Content-Type"] = "application/json";
     if (auth && tokens && tokens.access_token) h.Authorization = `Bearer ${tokens.access_token}`;
-    return fetch(url, { method, headers: h, body: hasBody ? JSON.stringify(body) : undefined, signal });
+    return fetch(url, { method, headers: h, body: hasBody ? (isForm ? body : JSON.stringify(body)) : undefined, signal });
   };
 
   let res;

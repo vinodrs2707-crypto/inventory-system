@@ -25,8 +25,9 @@ export default function Login() {
 
     setBusy(true);
     try {
-      await login(email.trim().toLowerCase(), password);
-      navigate(location.state?.from?.pathname || "/", { replace: true });
+      const me = await login(email.trim().toLowerCase(), password);
+      const home = me.role === "customer" ? "/" : "/admin";
+      navigate(location.state?.from?.pathname || home, { replace: true });
     } catch (err) {
       setFormError(err.message);
     } finally {

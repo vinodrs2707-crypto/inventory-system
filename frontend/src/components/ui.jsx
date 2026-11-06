@@ -151,3 +151,54 @@ export function Steps({ steps, history, endings = [] }) {
     </div>
   );
 }
+
+
+export function Modal({ title, onClose, wide = false, children }) {
+  return (
+    <div className="overlay" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
+      <div className={`dialog ${wide ? "dialog-wide" : ""}`} onClick={(e) => e.stopPropagation()}>
+        <div className="row-between" style={{ marginBottom: 8 }}>
+          <h3 style={{ margin: 0 }}>{title}</h3>
+          <button className="btn btn-secondary btn-small" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function StatCard({ label, value, hint }) {
+  return (
+    <div className="stat">
+      <div className="label">{label}</div>
+      <div className="value">{value}</div>
+      {hint && <div className="small muted">{hint}</div>}
+    </div>
+  );
+}
+
+export function BarChart({ data, valueKey, labelKey, format = (v) => v }) {
+  if (!data || data.length === 0) return null;
+  const max = Math.max(...data.map((d) => d[valueKey]), 1);
+  const width = 600;
+  const height = 180;
+  const gap = 2;
+  const barWidth = Math.max(2, width / data.length - gap);
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height + 20}`} className="chart" role="img" aria-label="Chart">
+        {data.map((d, i) => {
+          const barHeight = (d[valueKey] / max) * height;
+          return (
+            <rect key={i} x={i * (barWidth + gap)} y={height - barHeight} width={barWidth} height={barHeight} rx="2" fill="#2563eb">
+              <title>{`${d[labelKey]}: ${format(d[valueKey])}`}</title>
+            </rect>
+          );
+        })}
+        <text x="0" y={height + 16} fontSize="11" fill="#667085">{data[0][labelKey]}</text>
+        <text x={width} y={height + 16} fontSize="11" fill="#667085" textAnchor="end">{data[data.length - 1][labelKey]}</text>
+      </svg>
+      <div className="small muted">Highest bar: {format(max)}</div>
+    </div>
+  );
+}
